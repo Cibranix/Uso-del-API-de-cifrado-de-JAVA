@@ -27,7 +27,7 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 public class DesempaquetarExamen {
 
-    public final static void main(String[] args) { //paquete examen_claro profesor.privada alumno.publica
+    public final static void main(String[] args) { //paquete examen_claro profesor.privada alumno.publica autoridad.publica
         // Anadir provider  (el provider por defecto no soporta RSA)
 	    Security.addProvider(new BouncyCastleProvider()); // Cargar el provider BC
 
@@ -40,6 +40,7 @@ public class DesempaquetarExamen {
             byte[] bufferPriv = Files.readAllBytes(Paths.get(args[2]));
             PKCS8EncodedKeySpec clavePrivadaSpec = new PKCS8EncodedKeySpec(bufferPriv);
             PrivateKey clavePrivada = keyFactoryRSA.generatePrivate(clavePrivadaSpec);
+            System.out.println("Clave privada del profesor recuperada");
 
             cifradorRSA.init(Cipher.DECRYPT_MODE, clavePrivada); // Descrifra con la clave privada
             
@@ -68,17 +69,20 @@ public class DesempaquetarExamen {
             }catch (Exception e){
                 e.printStackTrace();
             }
+            
+            System.out.println("Examen en limpio obtenido");
 
             //Comprobar FIRMA DIGITAL
-            //Recuperar clave
+            //Recuperar clave publica del alumno
             byte[] bufferPub = Files.readAllBytes(Paths.get(args[3]));
             X509EncodedKeySpec clavePublicaSpec = new X509EncodedKeySpec(bufferPub);
             PublicKey clavePublica = keyFactoryRSA.generatePublic(clavePublicaSpec);
+            System.out.println("Clave publica del alumno recuperada");
 
             //Leemos el hash para descifrar
             byte [] firmaCifrada = p.getContenidoBloque("Hash Alumno");
 
-            //examenCifrado y claveDES_cifrada
+            //Verificar firma digital del alumno
             Signature firmaAlumno = Signature.getInstance("MD5withRSA");
             firmaAlumno.initVerify(clavePublica);
             firmaAlumno.update(examenCifrado);
@@ -88,6 +92,29 @@ public class DesempaquetarExamen {
             } else {
                 System.out.println("Error en la firma digital.");
             }
+
+            //Recuperar clave publica de la autoridad de sellado
+            byte[] bufferSellado = Files.readAllBytes(Paths.get(args[4]));
+            X509EncodedKeySpec claveSelladoSpec = new X509EncodedKeySpec(bufferSellado);
+            PublicKey claveSellado = keyFactoryRSA.generatePublic(claveSelladoSpec);
+            System.out.println("Clave publica de la autoridad de sellado");
+
+            byte [] fechaHora = p.getContenidoBloque("Fecha Hora");
+            byte [] sellado = p.getContenidoBloque("Sellado Tiempo");
+
+            //Verificar sellado de la autoridad de sellado
+            Signature selladoTiempo = Signature.getInstance("MD5withRSA");
+            selladoTiempo.initVerify(claveSellado);
+            selladoTiempo.update(fechaHora);
+            selladoTiempo.update(examenCifrado);
+            selladoTiempo.update(claveDES_cifrada);
+            selladoTiempo.update(firmaCifrada);
+            if (selladoTiempo.verify(sellado)) {
+                System.out.println("Sellado correcto!!");
+            } else {
+                System.out.println("Error en el sellado.");
+            }
+
 
         } catch (InvalidKeyException | NoSuchAlgorithmException | NoSuchProviderException | NoSuchPaddingException
                 | InvalidKeySpecException | IllegalBlockSizeException | BadPaddingException | IOException e1) {
