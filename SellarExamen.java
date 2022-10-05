@@ -7,6 +7,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.security.Security;
 import java.security.Signature;
 import java.security.SignatureException;
 import java.security.spec.InvalidKeySpecException;
@@ -14,8 +15,13 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Date;
 
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+
 public class SellarExamen {
     public final static void main(String[] args) { // examen.paquete alumno.publica autoridad.privada
+
+        // Anadir provider  (el provider por defecto no soporta RSA)
+		Security.addProvider(new BouncyCastleProvider()); // Cargar el provider BC
 
         try {
             // Recuperar clave publica del alumno
