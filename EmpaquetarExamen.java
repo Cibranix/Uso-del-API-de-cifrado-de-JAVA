@@ -38,10 +38,6 @@ public class EmpaquetarExamen {
             generadorDES.init(56); // clave de 56 bits
             SecretKey claveDES = generadorDES.generateKey();
 
-            System.out.println("CLAVE:");
-            mostrarBytes(claveDES.getEncoded());
-            System.out.println();
-
             //Crear cifrador DES
             Cipher cifradorDES = Cipher.getInstance("DES/ECB/PKCS5Padding");
 
@@ -68,8 +64,6 @@ public class EmpaquetarExamen {
             System.out.println("Cifrar con clave publica del profesor");
             byte[] claveDES_cifrada = cifradorRSA.doFinal(claveDES.getEncoded());
             System.out.println("CLAVE CIFRADA");
-            mostrarBytes(claveDES_cifrada);
-            System.out.println("\n-------------------------------");
 
             p.anadirBloque("Clave Cifrada", claveDES_cifrada);
 
@@ -98,8 +92,4 @@ public class EmpaquetarExamen {
             e.printStackTrace();
         }
     }
-
-    public static void mostrarBytes(byte [] buffer) {
-		System.out.write(buffer, 0, buffer.length);
-	}
 }
