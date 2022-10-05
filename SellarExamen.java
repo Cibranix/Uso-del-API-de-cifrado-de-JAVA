@@ -52,25 +52,30 @@ public class SellarExamen {
             PKCS8EncodedKeySpec clavePrivadaSpec = new PKCS8EncodedKeySpec(bufferPriv);
             PrivateKey clavePrivada = keyFactoryRSA.generatePrivate(clavePrivadaSpec);
 
+            //Firma de la autoridad de sellado
             Signature selladoTiempo = Signature.getInstance("MD5withRSA");
             selladoTiempo.initSign(clavePrivada);
             Date fechaHora = new Date();
-            p.anadirBloque("Sellado Tiempo", fechaHora.toString().getBytes());
+            System.out.println("Fecha y hora actuales: " + fechaHora);
+            p.anadirBloque("Fecha Hora", fechaHora.toString().getBytes());
+            System.out.println("Añadimos fecha de la firma al paquete");
             selladoTiempo.update(fechaHora.toString().getBytes());
             selladoTiempo.update(examenCifrado);
             selladoTiempo.update(claveDES_cifrada);
             selladoTiempo.update(firmaCifrada);
             byte [] hashSellado = selladoTiempo.sign();
+            System.out.println("Sellado de tiempo realizado");
 
             p.anadirBloque("Sellado Tiempo", hashSellado);
+            System.out.println("Sello añadido al paquete");
             
             p.escribirPaquete(args[0]);
+            System.out.println("Paquete sobreescrito con los 2 bloques del sellado");
 
         } catch (InvalidKeyException | NoSuchAlgorithmException | NoSuchProviderException | InvalidKeySpecException
                 | SignatureException | IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
         }
-
     }
 }
