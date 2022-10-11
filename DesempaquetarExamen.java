@@ -100,6 +100,9 @@ public class DesempaquetarExamen {
             System.out.println("Clave publica de la autoridad de sellado");
 
             byte [] fechaHora = p.getContenidoBloque("Fecha Hora");
+            System.out.print("Fecha de sellado: ");
+            mostrarBytes(fechaHora);
+            System.out.println();
             byte [] sellado = p.getContenidoBloque("Sellado Tiempo");
 
             //Verificar sellado de la autoridad de sellado
@@ -124,5 +127,9 @@ public class DesempaquetarExamen {
             e.printStackTrace();
         }
 
+
     }
+    public static void mostrarBytes(byte [] buffer) {
+		System.out.write(buffer, 0, buffer.length);
+    } 
 }
