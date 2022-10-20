@@ -58,7 +58,7 @@ public class EmpaquetarExamen {
             cifradorRSA.init(Cipher.ENCRYPT_MODE, clavePublica);
             // Cifrar clave que se utilizó para cifrar el examen
             byte[] claveDES_cifrada = cifradorRSA.doFinal(claveDES.getEncoded());
-            System.out.println("Clave DES cifrada");
+            System.out.println("Clave DES cifrada obtenida");
 
             // Leer clave alumno privada
             PrivateKey clavePrivada = recuperarClavePrivadaAlumno(args[3], keyFactoryRSA);
@@ -80,8 +80,11 @@ public class EmpaquetarExamen {
     private static void crearExamenEmpaquetado(String nombre, byte[] examenCifrado, byte[] claveDES_cifrada, byte[] hashAlumno) {
         Paquete p = new Paquete();
         p.anadirBloque("Examen Cifrado", examenCifrado);
+        System.out.println("Examen cifrado añadido al paquete");
         p.anadirBloque("Clave Cifrada", claveDES_cifrada);
+        System.out.println("Clave cifrada añadida al paquete");
         p.anadirBloque("Hash Alumno", hashAlumno);
+        System.out.println("Hash alumno añadido al paquete");
         p.escribirPaquete(nombre + ".paquete");
     }
 

@@ -41,28 +41,34 @@ public class DesempaquetarExamen {
             byte[] claveDES_cifrada = p.getContenidoBloque("Clave Cifrada"); // Leer clave cifrada
             byte[] firmaCifrada = p.getContenidoBloque("Hash Alumno"); // Leer hash alumno
             byte[] fechaHora = p.getContenidoBloque("Fecha Hora"); // Leer fecha
-            System.out.print("Fecha de sellado: ");
-            mostrarBytes(fechaHora);
-            System.out.println();
             byte[] sellado = p.getContenidoBloque("Sellado Tiempo"); // Leer sellado
+            System.out.println("Bloques necesarios del paquete cargados");
 
             // Comprobar FIRMAs DIGITALES
             // Recuperar clave publica de la autoridad de sellado
             PublicKey claveSellado = recuperarClavePublicaAutoridad(args[4], keyFactoryRSA);
+            System.out.println("Clave publica de la autoridad obtenida");
 
             // Verificar sellado de la autoridad de sellado
             if (esSelladoValido(examenCifrado, claveDES_cifrada, firmaCifrada, claveSellado, fechaHora, sellado)) {
                 // Recuperar clave publica del alumno
+                System.out.print("Fecha de sellado: ");
+                mostrarBytes(fechaHora);
+                System.out.println();
+
                 PublicKey clavePublica = recuperarClavePublicaAlumno(args[3], keyFactoryRSA);
+                System.out.println("Clave publica del alumno obtenida");
 
                 // Verificar firma digital del alumno
                 if (esFirmaAlumnoValida(examenCifrado, claveDES_cifrada, clavePublica, firmaCifrada)) {
                     // Recuperar clave privada del profesor
                     PrivateKey clavePrivada = recuperarClavePrivadaProfesor(args[2], keyFactoryRSA);
+                    System.out.println("Clave privada del profesor obtenida");
 
                     cifradorRSA.init(Cipher.DECRYPT_MODE, clavePrivada); // Descrifra con la clave privada
                     // Obtener clave descifrada
                     byte[] bytesClaveDES = cifradorRSA.doFinal(claveDES_cifrada);
+                    System.out.println("Clave DES descifrada obtenida");
 
                     // Crear cifradorDES
                     Cipher cifradorDES = Cipher.getInstance("DES/ECB/PKCS5Padding");
@@ -139,7 +145,6 @@ public class DesempaquetarExamen {
         byte[] bufferSellado = Files.readAllBytes(Paths.get(clave));
         X509EncodedKeySpec claveSelladoSpec = new X509EncodedKeySpec(bufferSellado);
         PublicKey claveSellado = keyFactoryRSA.generatePublic(claveSelladoSpec);
-        System.out.println("Clave publica de la autoridad de sellado");
         return claveSellado;
     }
 
@@ -148,7 +153,6 @@ public class DesempaquetarExamen {
         byte[] bufferPub = Files.readAllBytes(Paths.get(clave));
         X509EncodedKeySpec clavePublicaSpec = new X509EncodedKeySpec(bufferPub);
         PublicKey clavePublica = keyFactoryRSA.generatePublic(clavePublicaSpec);
-        System.out.println("Clave publica del alumno recuperada");
         return clavePublica;
     }
 
@@ -157,7 +161,6 @@ public class DesempaquetarExamen {
         byte[] bufferPriv = Files.readAllBytes(Paths.get(clave));
         PKCS8EncodedKeySpec clavePrivadaSpec = new PKCS8EncodedKeySpec(bufferPriv);
         PrivateKey clavePrivada = keyFactoryRSA.generatePrivate(clavePrivadaSpec);
-        System.out.println("Clave privada del profesor recuperada");
         return clavePrivada;
     }
 

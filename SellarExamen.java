@@ -26,17 +26,20 @@ public class SellarExamen {
             // Recuperar clave publica del alumno
             KeyFactory keyFactoryRSA = KeyFactory.getInstance("RSA", "BC");
             PublicKey clavePublica = recuperarClavePublicaAlumno(args[1], keyFactoryRSA);
+            System.out.println("Clave publica del alumno obtenida");
 
             //Cargar datos del paquete necesarios
             Paquete p = new Paquete(args[0]);
             byte[] firmaCifrada = p.getContenidoBloque("Hash Alumno");
             byte[] examenCifrado = p.getContenidoBloque("Examen Cifrado");
             byte[] claveDES_cifrada = p.getContenidoBloque("Clave Cifrada");
+            System.out.println("Bloques necesarios del paquete cargados");
 
             //Comprobar FIRMA DIGITAL del alumno
             if(esFirmaAlumnoValida(clavePublica, firmaCifrada, examenCifrado, claveDES_cifrada)){
                 //Recuperar clave privada de la autoridad
                 PrivateKey clavePrivada = recuperarClavePrivadaAutoridad(args[2], keyFactoryRSA);
+                System.out.println("Clave privada de la autoridad obtenida");
 
                 Date fechaHora = new Date();
                 //Firma de la autoridad de sellado
@@ -44,6 +47,8 @@ public class SellarExamen {
                 System.out.println("Sellado de tiempo realizado");
 
                 sobreescribirPaquete(args[0], p, fechaHora, hashSellado);
+                System.out.println("Paquete sobreescrito con los 2 bloques del sellado");
+
             } else {
                 System.err.println("ERROR: FIRMA ALUMNO NO VALIDA, NO SE HA LLEVADO A CABO EL SELLADO");
             }
@@ -56,11 +61,10 @@ public class SellarExamen {
 
     private static void sobreescribirPaquete(String nombrePaquete, Paquete p, Date fechaHora, byte[] hashSellado) {
         p.anadirBloque("Fecha Hora", fechaHora.toString().getBytes());
-        System.out.println("Añadimos fecha de la firma al paquete");
+        System.out.println("Fecha del sellado añadida al paquete");
         p.anadirBloque("Sellado Tiempo", hashSellado);
         System.out.println("Sello añadido al paquete");
         p.escribirPaquete(nombrePaquete);
-        System.out.println("Paquete sobreescrito con los 2 bloques del sellado");
     }
 
     private static boolean esFirmaAlumnoValida(PublicKey clavePublica, byte[] firmaCifrada, byte[] examenCifrado,
