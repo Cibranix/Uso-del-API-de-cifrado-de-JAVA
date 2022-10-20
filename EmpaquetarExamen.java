@@ -30,11 +30,15 @@ public class EmpaquetarExamen {
 
         try {
 
+            // Leemos el archivo del examen
+            byte[] examen = Files.readAllBytes(Paths.get(args[0]));
+            System.out.println("Examen cargado");
+
             // Crear clave DES
-            System.out.println("Generar clave DES");
             KeyGenerator generadorDES = KeyGenerator.getInstance("DES");
             generadorDES.init(56); // clave de 56 bits
             SecretKey claveDES = generadorDES.generateKey();
+            System.out.println("Clave DES generada");
 
             // Crear cifrador DES
             Cipher cifradorDES = Cipher.getInstance("DES/ECB/PKCS5Padding");
@@ -42,29 +46,29 @@ public class EmpaquetarExamen {
             Cipher cifradorRSA = Cipher.getInstance("RSA", "BC");
             KeyFactory keyFactoryRSA = KeyFactory.getInstance("RSA", "BC");
 
-            // Leemos el archivo del examen
-            byte[] examen = Files.readAllBytes(Paths.get(args[0]));
-
             // Inicializar cifrador DES en modo CIFRADO 
-            System.out.println("Inicializar cifrador DES");
             cifradorDES.init(Cipher.ENCRYPT_MODE, claveDES);
             byte[] examenCifrado = cifradorDES.doFinal(examen); // Completar cifrado (procesa relleno, puede devolver texto)
+            System.out.println("Examen cifrado obtenido");
 
             // Recuperar clave publica del profesor
             PublicKey clavePublica = recuperarClavePublicaProfesor(args[2], keyFactoryRSA);
+            System.out.println("Clave publica del profesor obtenida");
             // Iniciar cifrado
             cifradorRSA.init(Cipher.ENCRYPT_MODE, clavePublica);
             // Cifrar clave que se utilizó para cifrar el examen
-            System.out.println("Cifrar con clave publica del profesor");
             byte[] claveDES_cifrada = cifradorRSA.doFinal(claveDES.getEncoded());
-            System.out.println("CLAVE CIFRADA");
+            System.out.println("Clave DES cifrada");
 
             // Leer clave alumno privada
             PrivateKey clavePrivada = recuperarClavePrivadaAlumno(args[3], keyFactoryRSA);
+            System.out.println("Clave privada del alumno obtenida");
             // Firma digital Alumno con claveDES_cifrada y examenCifrado
             byte[] hashAlumno = realizarFirmaDigital(examenCifrado, claveDES_cifrada, clavePrivada);
+            System.out.println("Firma digital realizada");
 
             crearExamenEmpaquetado(args[1], examenCifrado, claveDES_cifrada, hashAlumno);
+            System.out.println("Examen Empaquetado creado");
 
         } catch (InvalidKeyException | NoSuchAlgorithmException | NoSuchPaddingException | IllegalBlockSizeException
                 | BadPaddingException | NoSuchProviderException | InvalidKeySpecException | SignatureException
@@ -84,7 +88,6 @@ public class EmpaquetarExamen {
     private static byte[] realizarFirmaDigital(byte[] examenCifrado, byte[] claveDES_cifrada, PrivateKey clavePrivada)
             throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
         Signature firmaAlumno = Signature.getInstance("MD5withRSA");
-        System.out.println("Realizar firma digital");
         firmaAlumno.initSign(clavePrivada);
         firmaAlumno.update(examenCifrado);
         firmaAlumno.update(claveDES_cifrada);
