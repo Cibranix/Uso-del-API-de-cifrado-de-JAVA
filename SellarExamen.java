@@ -18,17 +18,14 @@ import java.util.Date;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 public class SellarExamen {
-    public final static void main(String[] args) { // examen.paquete alumno.publica autoridad.privada
-
+    public final static void main(String[] args) { // <nombre_paquete.paquete> <alumno.publica> <autoridad.privada>
         // Anadir provider  (el provider por defecto no soporta RSA)
 		Security.addProvider(new BouncyCastleProvider()); // Cargar el provider BC
 
         try {
             // Recuperar clave publica del alumno
             KeyFactory keyFactoryRSA = KeyFactory.getInstance("RSA", "BC");
-            byte[] bufferPub = Files.readAllBytes(Paths.get(args[1]));
-            X509EncodedKeySpec clavePublicaSpec = new X509EncodedKeySpec(bufferPub);
-            PublicKey clavePublica = keyFactoryRSA.generatePublic(clavePublicaSpec);
+            PublicKey clavePublica = recuperarClavePublicaAlumno(args[1], keyFactoryRSA);
 
             //Cargar datos del paquete necesarios
             Paquete p = new Paquete(args[0]);
@@ -37,45 +34,77 @@ public class SellarExamen {
             byte[] claveDES_cifrada = p.getContenidoBloque("Clave Cifrada");
 
             //Comprobar FIRMA DIGITAL del alumno
-            Signature firmaAlumno = Signature.getInstance("MD5withRSA");
-            firmaAlumno.initVerify(clavePublica);
-            firmaAlumno.update(examenCifrado);
-            firmaAlumno.update(claveDES_cifrada);
-            if (firmaAlumno.verify(firmaCifrada)) {
-                System.out.println("Firma digital correcta!!");
+            if(esFirmaAlumnoValida(clavePublica, firmaCifrada, examenCifrado, claveDES_cifrada)){
+                //Recuperar clave privada de la autoridad
+                PrivateKey clavePrivada = recuperarClavePrivadaAutoridad(args[2], keyFactoryRSA);
+
+                Date fechaHora = new Date();
+                //Firma de la autoridad de sellado
+                byte[] hashSellado = realizarSellado(firmaCifrada, examenCifrado, claveDES_cifrada, clavePrivada, fechaHora);
+                System.out.println("Sellado de tiempo realizado");
+
+                sobreescribirPaquete(args[0], p, fechaHora, hashSellado);
             } else {
-                System.out.println("Error en la firma digital.");
+                System.err.println("ERROR: FIRMA ALUMNO NO VALIDA, NO SE HA LLEVADO A CABO EL SELLADO");
             }
-
-            //Recuperar clave privada de la autoridad
-            byte[] bufferPriv = Files.readAllBytes(Paths.get(args[2]));
-            PKCS8EncodedKeySpec clavePrivadaSpec = new PKCS8EncodedKeySpec(bufferPriv);
-            PrivateKey clavePrivada = keyFactoryRSA.generatePrivate(clavePrivadaSpec);
-
-            //Firma de la autoridad de sellado
-            Signature selladoTiempo = Signature.getInstance("MD5withRSA");
-            selladoTiempo.initSign(clavePrivada);
-            Date fechaHora = new Date();
-            System.out.println("Fecha y hora actuales: " + fechaHora);
-            p.anadirBloque("Fecha Hora", fechaHora.toString().getBytes());
-            System.out.println("Añadimos fecha de la firma al paquete");
-            selladoTiempo.update(fechaHora.toString().getBytes());
-            selladoTiempo.update(examenCifrado);
-            selladoTiempo.update(claveDES_cifrada);
-            selladoTiempo.update(firmaCifrada);
-            byte [] hashSellado = selladoTiempo.sign();
-            System.out.println("Sellado de tiempo realizado");
-
-            p.anadirBloque("Sellado Tiempo", hashSellado);
-            System.out.println("Sello añadido al paquete");
-            
-            p.escribirPaquete(args[0]);
-            System.out.println("Paquete sobreescrito con los 2 bloques del sellado");
 
         } catch (InvalidKeyException | NoSuchAlgorithmException | NoSuchProviderException | InvalidKeySpecException
                 | SignatureException | IOException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
+    }
+
+    private static void sobreescribirPaquete(String nombrePaquete, Paquete p, Date fechaHora, byte[] hashSellado) {
+        p.anadirBloque("Fecha Hora", fechaHora.toString().getBytes());
+        System.out.println("Añadimos fecha de la firma al paquete");
+        p.anadirBloque("Sellado Tiempo", hashSellado);
+        System.out.println("Sello añadido al paquete");
+        p.escribirPaquete(nombrePaquete);
+        System.out.println("Paquete sobreescrito con los 2 bloques del sellado");
+    }
+
+    private static boolean esFirmaAlumnoValida(PublicKey clavePublica, byte[] firmaCifrada, byte[] examenCifrado,
+            byte[] claveDES_cifrada) throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
+        Signature firmaAlumno = Signature.getInstance("MD5withRSA");
+        firmaAlumno.initVerify(clavePublica);
+        firmaAlumno.update(examenCifrado);
+        firmaAlumno.update(claveDES_cifrada);
+        if (firmaAlumno.verify(firmaCifrada)) {
+            System.out.println("Firma digital correcta!!");
+            return true;
+        } else {
+            System.out.println("Error en la firma digital.");
+            return false;
+        }
+    }
+
+    private static PublicKey recuperarClavePublicaAlumno(String clave, KeyFactory keyFactoryRSA)
+            throws IOException, InvalidKeySpecException {
+        byte[] bufferPub = Files.readAllBytes(Paths.get(clave));
+        X509EncodedKeySpec clavePublicaSpec = new X509EncodedKeySpec(bufferPub);
+        PublicKey clavePublica = keyFactoryRSA.generatePublic(clavePublicaSpec);
+        return clavePublica;
+    }
+
+    private static PrivateKey recuperarClavePrivadaAutoridad(String clave, KeyFactory keyFactoryRSA)
+            throws IOException, InvalidKeySpecException {
+        byte[] bufferPriv = Files.readAllBytes(Paths.get(clave));
+        PKCS8EncodedKeySpec clavePrivadaSpec = new PKCS8EncodedKeySpec(bufferPriv);
+        PrivateKey clavePrivada = keyFactoryRSA.generatePrivate(clavePrivadaSpec);
+        return clavePrivada;
+    }
+
+    private static byte[] realizarSellado(byte[] firmaCifrada, byte[] examenCifrado, byte[] claveDES_cifrada,
+            PrivateKey clavePrivada, Date fechaHora)
+            throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
+        Signature selladoTiempo = Signature.getInstance("MD5withRSA");
+        selladoTiempo.initSign(clavePrivada);
+        System.out.println("Fecha y hora actuales: " + fechaHora);
+        selladoTiempo.update(fechaHora.toString().getBytes());
+        selladoTiempo.update(examenCifrado);
+        selladoTiempo.update(claveDES_cifrada);
+        selladoTiempo.update(firmaCifrada);
+        byte [] hashSellado = selladoTiempo.sign();
+        return hashSellado;
     }
 }

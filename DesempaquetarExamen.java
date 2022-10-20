@@ -27,109 +27,141 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 public class DesempaquetarExamen {
 
-    public final static void main(String[] args) { //paquete examen_claro profesor.privada alumno.publica autoridad.publica
-        // Anadir provider  (el provider por defecto no soporta RSA)
-	    Security.addProvider(new BouncyCastleProvider()); // Cargar el provider BC
+    public final static void main(String[] args) { // <nombre_paquete.paquete> <nombre_examen_claro.txt> <profesor.privada> <alumno.publica> <autoridad.publica>        
+        // Anadir provider (el provider por defecto no soporta RSA)
+        Security.addProvider(new BouncyCastleProvider()); // Cargar el provider BC
 
-        //Obtener CLAVE CIFRADA (profesor.privada) RSA
-        byte[] examen_claro;
         try {
             Cipher cifradorRSA = Cipher.getInstance("RSA", "BC"); // Hace uso del provider BC
             KeyFactory keyFactoryRSA = KeyFactory.getInstance("RSA", "BC");
-            
-            byte[] bufferPriv = Files.readAllBytes(Paths.get(args[2]));
-            PKCS8EncodedKeySpec clavePrivadaSpec = new PKCS8EncodedKeySpec(bufferPriv);
-            PrivateKey clavePrivada = keyFactoryRSA.generatePrivate(clavePrivadaSpec);
-            System.out.println("Clave privada del profesor recuperada");
 
-            cifradorRSA.init(Cipher.DECRYPT_MODE, clavePrivada); // Descrifra con la clave privada
-            
-            //Leer clave cifrada
+            // Cargar examen.paquete
             Paquete p = new Paquete(args[0]);
-            byte [] claveDES_cifrada = p.getContenidoBloque("Clave Cifrada");
-
-            //Obtener clave descifrada
-            byte [] bytesClaveDES = cifradorRSA.doFinal(claveDES_cifrada);
-
-            //Crear cifradorDES
-            Cipher cifradorDES = Cipher.getInstance("DES/ECB/PKCS5Padding");
-            SecretKey claveDES = new SecretKeySpec(bytesClaveDES, "DES");
-            cifradorDES.init(Cipher.DECRYPT_MODE, claveDES);
-
-            //Leer examen cifrado
-            byte [] examenCifrado = p.getContenidoBloque("Examen Cifrado");
-            examen_claro = cifradorDES.doFinal(examenCifrado);
-
-            //Obtener Examen limpio
-            File file = new File(args[1]);
-            try {
-                FileOutputStream out = new FileOutputStream(file);
-                out.write(examen_claro);
-                out.close();
-            }catch (Exception e){
-                e.printStackTrace();
-            }
-            
-            System.out.println("Examen en limpio obtenido");
-
-            //Comprobar FIRMA DIGITAL
-            //Recuperar clave publica del alumno
-            byte[] bufferPub = Files.readAllBytes(Paths.get(args[3]));
-            X509EncodedKeySpec clavePublicaSpec = new X509EncodedKeySpec(bufferPub);
-            PublicKey clavePublica = keyFactoryRSA.generatePublic(clavePublicaSpec);
-            System.out.println("Clave publica del alumno recuperada");
-
-            //Leemos el hash para descifrar
-            byte [] firmaCifrada = p.getContenidoBloque("Hash Alumno");
-
-            //Verificar firma digital del alumno
-            Signature firmaAlumno = Signature.getInstance("MD5withRSA");
-            firmaAlumno.initVerify(clavePublica);
-            firmaAlumno.update(examenCifrado);
-            firmaAlumno.update(claveDES_cifrada);
-            if(firmaAlumno.verify(firmaCifrada)){
-                System.out.println("Firma digital correcta!!");
-            } else {
-                System.out.println("Error en la firma digital.");
-            }
-
-            //Recuperar clave publica de la autoridad de sellado
-            byte[] bufferSellado = Files.readAllBytes(Paths.get(args[4]));
-            X509EncodedKeySpec claveSelladoSpec = new X509EncodedKeySpec(bufferSellado);
-            PublicKey claveSellado = keyFactoryRSA.generatePublic(claveSelladoSpec);
-            System.out.println("Clave publica de la autoridad de sellado");
-
-            byte [] fechaHora = p.getContenidoBloque("Fecha Hora");
+            byte[] examenCifrado = p.getContenidoBloque("Examen Cifrado"); // Leer examen cifrado
+            byte[] claveDES_cifrada = p.getContenidoBloque("Clave Cifrada"); // Leer clave cifrada
+            byte[] firmaCifrada = p.getContenidoBloque("Hash Alumno"); // Leer hash alumno
+            byte[] fechaHora = p.getContenidoBloque("Fecha Hora"); // Leer fecha
             System.out.print("Fecha de sellado: ");
             mostrarBytes(fechaHora);
             System.out.println();
-            byte [] sellado = p.getContenidoBloque("Sellado Tiempo");
+            byte[] sellado = p.getContenidoBloque("Sellado Tiempo"); // Leer sellado
 
-            //Verificar sellado de la autoridad de sellado
-            Signature selladoTiempo = Signature.getInstance("MD5withRSA");
-            selladoTiempo.initVerify(claveSellado);
-            selladoTiempo.update(fechaHora);
-            selladoTiempo.update(examenCifrado);
-            selladoTiempo.update(claveDES_cifrada);
-            selladoTiempo.update(firmaCifrada);
-            if (selladoTiempo.verify(sellado)) {
-                System.out.println("Sellado correcto!!");
+            // Comprobar FIRMAs DIGITALES
+            // Recuperar clave publica de la autoridad de sellado
+            PublicKey claveSellado = recuperarClavePublicaAutoridad(args[4], keyFactoryRSA);
+
+            // Verificar sellado de la autoridad de sellado
+            if (esSelladoValido(examenCifrado, claveDES_cifrada, firmaCifrada, claveSellado, fechaHora, sellado)) {
+                // Recuperar clave publica del alumno
+                PublicKey clavePublica = recuperarClavePublicaAlumno(args[3], keyFactoryRSA);
+
+                // Verificar firma digital del alumno
+                if (esFirmaAlumnoValida(examenCifrado, claveDES_cifrada, clavePublica, firmaCifrada)) {
+                    // Recuperar clave privada del profesor
+                    PrivateKey clavePrivada = recuperarClavePrivadaProfesor(args[2], keyFactoryRSA);
+
+                    cifradorRSA.init(Cipher.DECRYPT_MODE, clavePrivada); // Descrifra con la clave privada
+                    // Obtener clave descifrada
+                    byte[] bytesClaveDES = cifradorRSA.doFinal(claveDES_cifrada);
+
+                    // Crear cifradorDES
+                    Cipher cifradorDES = Cipher.getInstance("DES/ECB/PKCS5Padding");
+                    SecretKey claveDES = new SecretKeySpec(bytesClaveDES, "DES");
+                    cifradorDES.init(Cipher.DECRYPT_MODE, claveDES);
+
+                    byte[] examen_claro = cifradorDES.doFinal(examenCifrado);
+
+                    // Obtener Examen limpio
+                    crearExamenLimpio(args[1], examen_claro);
+
+                    System.out.println("Examen en limpio obtenido");
+
+                } else {
+                    System.err.println("ERROR: FIRMA ALUMNO NO VALIDA");
+                }
             } else {
-                System.out.println("Error en el sellado.");
+                System.err.println("ERROR: SELLADO NO VALID0");
             }
 
-
         } catch (InvalidKeyException | NoSuchAlgorithmException | NoSuchProviderException | NoSuchPaddingException
-                | InvalidKeySpecException | IllegalBlockSizeException | BadPaddingException | IOException e1) {
-            e1.printStackTrace();
-        } catch (SignatureException e) {
-            // TODO Auto-generated catch block
+                | InvalidKeySpecException | IllegalBlockSizeException | BadPaddingException | IOException
+                | SignatureException e) {
             e.printStackTrace();
         }
-
-
     }
-    public static void mostrarBytes(byte [] buffer) {
-		System.out.write(buffer, 0, buffer.length);
-    } 
+
+    private static void crearExamenLimpio(String nombreExamen, byte[] examen_claro) {
+        File file = new File(nombreExamen);
+        try {
+            FileOutputStream out = new FileOutputStream(file);
+            out.write(examen_claro);
+            out.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static boolean esSelladoValido(byte[] examenCifrado, byte[] claveDES_cifrada, byte[] firmaCifrada,
+            PublicKey claveSellado, byte[] fechaHora, byte[] sellado)
+            throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
+        Signature selladoTiempo = Signature.getInstance("MD5withRSA");
+        selladoTiempo.initVerify(claveSellado);
+        selladoTiempo.update(fechaHora);
+        selladoTiempo.update(examenCifrado);
+        selladoTiempo.update(claveDES_cifrada);
+        selladoTiempo.update(firmaCifrada);
+        if (selladoTiempo.verify(sellado)) {
+            System.out.println("Sellado correcto!!");
+            return true;
+        } else {
+            System.out.println("Error en el sellado.");
+            return false;
+        }
+    }
+
+    private static boolean esFirmaAlumnoValida(byte[] examenCifrado, byte[] claveDES_cifrada, PublicKey clavePublica,
+            byte[] firmaCifrada) throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
+        Signature firmaAlumno = Signature.getInstance("MD5withRSA");
+        firmaAlumno.initVerify(clavePublica);
+        firmaAlumno.update(examenCifrado);
+        firmaAlumno.update(claveDES_cifrada);
+        if (firmaAlumno.verify(firmaCifrada)) {
+            System.out.println("Firma digital correcta!!");
+            return true;
+        } else {
+            System.out.println("Error en la firma digital.");
+            return false;
+        }
+    }
+
+    private static PublicKey recuperarClavePublicaAutoridad(String clave, KeyFactory keyFactoryRSA)
+            throws IOException, InvalidKeySpecException {
+        byte[] bufferSellado = Files.readAllBytes(Paths.get(clave));
+        X509EncodedKeySpec claveSelladoSpec = new X509EncodedKeySpec(bufferSellado);
+        PublicKey claveSellado = keyFactoryRSA.generatePublic(claveSelladoSpec);
+        System.out.println("Clave publica de la autoridad de sellado");
+        return claveSellado;
+    }
+
+    private static PublicKey recuperarClavePublicaAlumno(String clave, KeyFactory keyFactoryRSA)
+            throws IOException, InvalidKeySpecException {
+        byte[] bufferPub = Files.readAllBytes(Paths.get(clave));
+        X509EncodedKeySpec clavePublicaSpec = new X509EncodedKeySpec(bufferPub);
+        PublicKey clavePublica = keyFactoryRSA.generatePublic(clavePublicaSpec);
+        System.out.println("Clave publica del alumno recuperada");
+        return clavePublica;
+    }
+
+    private static PrivateKey recuperarClavePrivadaProfesor(String clave, KeyFactory keyFactoryRSA)
+            throws IOException, InvalidKeySpecException {
+        byte[] bufferPriv = Files.readAllBytes(Paths.get(clave));
+        PKCS8EncodedKeySpec clavePrivadaSpec = new PKCS8EncodedKeySpec(bufferPriv);
+        PrivateKey clavePrivada = keyFactoryRSA.generatePrivate(clavePrivadaSpec);
+        System.out.println("Clave privada del profesor recuperada");
+        return clavePrivada;
+    }
+
+    public static void mostrarBytes(byte[] buffer) {
+        System.out.write(buffer, 0, buffer.length);
+    }
 }
